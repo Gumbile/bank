@@ -29,6 +29,9 @@
     let recipientAccountId = '';
     let accountTransferAmount = '';
     let accountTransferDescription = '';
+    let activeTab: 'accounts' | 'balance' | 'transactions' = 'accounts';
+    let copiedId: string | null = null;
+    let isDarkMode = false;
 
     async function handleLogout() {
         try {
@@ -340,13 +343,41 @@
             currency: 'USD'
         }).format(amount);
     }
+
+    function switchTab(tab: 'accounts' | 'balance' | 'transactions') {
+        activeTab = tab;
+    }
+
+    async function copyAccountId(id: string) {
+        try {
+            await navigator.clipboard.writeText(id);
+            copiedId = id;
+            setTimeout(() => {
+                copiedId = null;
+            }, 2000);
+        } catch (err) {
+            console.error('Failed to copy:', err);
+        }
+    }
+
+    function toggleDarkMode() {
+        isDarkMode = !isDarkMode;
+        document.documentElement.classList.toggle('dark-mode');
+    }
 </script>
 
-<div class="dashboard">
+<div class="dashboard" class:dark-mode={isDarkMode}>
     <nav class="dashboard-nav">
         <div class="nav-brand">BankPro</div>
         <div class="nav-user">
             <span>Welcome, {customer?.firstName} {customer?.lastName}</span>
+            <button 
+                class="btn-theme"
+                on:click={toggleDarkMode}
+                title={isDarkMode ? "Switch to Light Mode" : "Switch to Dark Mode"}
+            >
+                {isDarkMode ? '☀️' : '🌙'}
+            </button>
             <button 
                 class="btn-logout" 
                 on:click={handleLogout}
@@ -363,43 +394,81 @@
         {:else if error}
             <div class="error-message">{error}</div>
         {:else}
-            <div class="dashboard-grid">
-                <!-- Account Selection -->
-                <div class="card account-selection">
-                    <h2>Your Accounts</h2>
-                    {#if accounts.length === 0}
-                        <p class="no-accounts">No accounts yet</p>
-                        <button 
-                            class="btn-primary"
-                            on:click={() => showNewAccountModal = true}
-                        >
-                            Open New Account
-                        </button>
-                    {:else}
-                        <div class="account-list">
-                            {#each accounts as account}
-                                <button
-                                    class="account-item {selectedAccount?.id === account.id ? 'selected' : ''}"
-                                    on:click={() => handleAccountSelect(account)}
-                                >
-                                    <div class="account-info">
-                                        <span class="account-balance">{formatAmount(account.balance)}</span>
-                                        <span class="account-status">{account.status}</span>
-                                    </div>
-                                </button>
-                            {/each}
+            <div class="tabs">
+                <button 
+                    class="tab-btn {activeTab === 'accounts' ? 'active' : ''}"
+                    on:click={() => switchTab('accounts')}
+                >
+                    Accounts
+                </button>
+                <button 
+                    class="tab-btn {activeTab === 'balance' ? 'active' : ''}"
+                    on:click={() => switchTab('balance')}
+                    disabled={!selectedAccount}
+                >
+                    Balance
+                </button>
+                <button 
+                    class="tab-btn {activeTab === 'transactions' ? 'active' : ''}"
+                    on:click={() => switchTab('transactions')}
+                    disabled={!selectedAccount}
+                >
+                    Transactions
+                </button>
+            </div>
+
+            <div class="tab-content">
+                {#if activeTab === 'accounts'}
+                    <div class="card account-selection">
+                        <h2>Your Accounts</h2>
+                        {#if accounts.length === 0}
+                            <p class="no-accounts">No accounts yet</p>
                             <button 
-                                class="btn-secondary"
+                                class="btn-primary"
                                 on:click={() => showNewAccountModal = true}
                             >
                                 Open New Account
                             </button>
-                        </div>
-                    {/if}
-                </div>
-
-                {#if selectedAccount}
-                    <!-- Account Overview -->
+                        {:else}
+                            <div class="account-list">
+                                {#each accounts as account}
+                                    <div
+                                        class="account-item {selectedAccount?.id === account.id ? 'selected' : ''}"
+                                        on:click={() => handleAccountSelect(account)}
+                                    >
+                                        <div class="account-info">
+                                            <div class="account-header">
+                                                <span class="account-balance">{formatAmount(account.balance)}</span>
+                                                <span class="account-status">{account.status}</span>
+                                            </div>
+                                            <div class="account-id">
+                                                <span class="id-label">Account ID:</span>
+                                                <span class="id-value">{account.id}</span>
+                                                <button 
+                                                    class="btn-copy"
+                                                    on:click|stopPropagation={() => copyAccountId(account.id)}
+                                                    title="Copy Account ID"
+                                                >
+                                                    {#if copiedId === account.id}
+                                                        <span class="copy-icon">✓</span>
+                                                    {:else}
+                                                        <span class="copy-icon">📋</span>
+                                                    {/if}
+                                                </button>
+                                            </div>
+                                        </div>
+                                    </div>
+                                {/each}
+                                <button 
+                                    class="btn-secondary"
+                                    on:click={() => showNewAccountModal = true}
+                                >
+                                    Open New Account
+                                </button>
+                            </div>
+                        {/if}
+                    </div>
+                {:else if activeTab === 'balance' && selectedAccount}
                     <div class="card account-overview">
                         <h2>Account Overview</h2>
                         <div class="balance">
@@ -427,8 +496,7 @@
                             </button>
                         </div>
                     </div>
-
-                    <!-- Recent Transactions -->
+                {:else if activeTab === 'transactions' && selectedAccount}
                     <div class="card transactions">
                         <h2>Recent Transactions</h2>
                         {#if transactions.length === 0}
@@ -468,7 +536,15 @@
     {#if showTransactionModal}
         <div class="modal-backdrop" on:click={() => showTransactionModal = false}>
             <div class="modal-content" on:click|stopPropagation>
-                <h2>New Transaction</h2>
+                <div class="modal-header">
+                    <h2>New Transaction</h2>
+                    <button 
+                        class="btn-close"
+                        on:click={() => showTransactionModal = false}
+                    >
+                        ×
+                    </button>
+                </div>
                 <form on:submit|preventDefault class="transaction-form">
                     <div class="form-group">
                         <label for="amount">Amount</label>
@@ -559,7 +635,15 @@
     {#if showTransferModal}
         <div class="modal-backdrop" on:click={() => showTransferModal = false}>
             <div class="modal-content" on:click|stopPropagation>
-                <h2>Transfer Money</h2>
+                <div class="modal-header">
+                    <h2>Transfer Money</h2>
+                    <button 
+                        class="btn-close"
+                        on:click={() => showTransferModal = false}
+                    >
+                        ×
+                    </button>
+                </div>
                 <form on:submit|preventDefault class="transfer-form">
                     <div class="form-group">
                         <label for="fromAccount">From Account</label>
@@ -704,7 +788,15 @@
     {#if showAccountTransferModal}
         <div class="modal-backdrop" on:click={() => showAccountTransferModal = false}>
             <div class="modal-content" on:click|stopPropagation>
-                <h2>Send to Another Account</h2>
+                <div class="modal-header">
+                    <h2>Send to Another Account</h2>
+                    <button 
+                        class="btn-close"
+                        on:click={() => showAccountTransferModal = false}
+                    >
+                        ×
+                    </button>
+                </div>
                 <form on:submit|preventDefault class="transfer-form">
                     <div class="form-group">
                         <label for="fromAccount">From Account</label>
@@ -772,81 +864,190 @@
 </div>
 
 <style>
+    :root {
+        --bg-primary: #f0f9ff;
+        --bg-secondary: #ffffff;
+        --text-primary: #1e293b;
+        --text-secondary: #64748b;
+        --border-color: #e2e8f0;
+        --card-bg: #ffffff;
+        --hover-bg: #f1f5f9;
+        --shadow-color: rgba(0, 0, 0, 0.1);
+    }
+
+    :root.dark-mode {
+        --bg-primary: #0f172a;
+        --bg-secondary: #1e293b;
+        --text-primary: #f8fafc;
+        --text-secondary: #cbd5e1;
+        --border-color: #334155;
+        --card-bg: #1e293b;
+        --hover-bg: #334155;
+        --shadow-color: rgba(0, 0, 0, 0.3);
+    }
+
     .dashboard {
         min-height: 100vh;
-        background: #f8fafc;
+        background: linear-gradient(135deg, var(--bg-primary) 0%, var(--bg-secondary) 100%);
+        color: var(--text-primary);
     }
 
     .dashboard-nav {
-        background: white;
+        background: var(--card-bg);
+        backdrop-filter: blur(10px);
         padding: 1rem 2rem;
         display: flex;
         justify-content: space-between;
         align-items: center;
-        box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+        box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1);
+        position: sticky;
+        top: 0;
+        z-index: 100;
+        border-bottom: 1px solid var(--border-color);
     }
 
     .nav-brand {
-        font-size: 1.5rem;
+        font-size: 1.75rem;
         font-weight: bold;
-        color: #2563eb;
+        background: linear-gradient(135deg, #3b82f6 0%, #2563eb 100%);
+        -webkit-background-clip: text;
+        -webkit-text-fill-color: transparent;
+        text-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
     }
 
     .nav-user {
         display: flex;
         align-items: center;
-        gap: 1rem;
+        gap: 1.5rem;
+    }
+
+    .nav-user span {
+        color: var(--text-primary);
+    }
+
+    .btn-theme {
+        background: none;
+        border: none;
+        font-size: 1.25rem;
+        cursor: pointer;
+        padding: 0.5rem;
+        border-radius: 0.5rem;
+        transition: all 0.3s ease;
+        color: var(--text-primary);
+    }
+
+    .btn-theme:hover {
+        background: var(--hover-bg);
     }
 
     .btn-logout {
         background: none;
-        border: none;
-        color: #64748b;
+        border: 2px solid var(--border-color);
+        color: var(--text-secondary);
         cursor: pointer;
         font-weight: 500;
+        padding: 0.5rem 1rem;
+        border-radius: 1rem;
+        transition: all 0.3s ease;
+    }
+
+    .btn-logout:hover {
+        background: var(--hover-bg);
+        border-color: var(--text-secondary);
+        transform: translateY(-1px);
     }
 
     .dashboard-content {
         padding: 2rem;
-        max-width: 1200px;
+        max-width: 1000px;
         margin: 0 auto;
     }
 
-    .dashboard-grid {
-        display: grid;
-        grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
-        gap: 2rem;
+    .tabs {
+        display: flex;
+        gap: 1rem;
+        margin-bottom: 2rem;
+        background: white;
+        padding: 0.5rem;
+        border-radius: 1rem;
+        box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1);
+    }
+
+    .tab-btn {
+        padding: 0.75rem 1.5rem;
+        border: none;
+        background: none;
+        color: #64748b;
+        font-weight: 600;
+        cursor: pointer;
+        border-radius: 0.75rem;
+        transition: all 0.3s ease;
+        font-size: 0.875rem;
+        position: relative;
+        overflow: hidden;
+    }
+
+    .tab-btn:disabled {
+        opacity: 0.5;
+        cursor: not-allowed;
+    }
+
+    .tab-btn:hover:not(:disabled) {
+        background: #f8fafc;
+        color: #1e293b;
+        transform: translateY(-1px);
+    }
+
+    .tab-btn.active {
+        background: linear-gradient(135deg, #3b82f6 0%, #2563eb 100%);
+        color: white;
+        box-shadow: 0 4px 6px -1px rgba(37, 99, 235, 0.2);
     }
 
     .card {
-        background: white;
-        border-radius: 0.5rem;
+        background: var(--card-bg);
+        border-radius: 1rem;
         padding: 1.5rem;
-        box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+        box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1);
+        transition: transform 0.3s ease;
+        border: 1px solid var(--border-color);
+        color: var(--text-primary);
+    }
+
+    .card:hover {
+        transform: translateY(-2px);
     }
 
     .card h2 {
-        color: #1e293b;
-        font-size: 1.25rem;
-        margin-bottom: 1rem;
+        color: var(--text-primary);
+        font-size: 1.5rem;
+        margin-bottom: 1.5rem;
+        font-weight: 600;
+        background: none;
+        -webkit-text-fill-color: var(--text-primary);
     }
 
     .balance {
         display: flex;
         flex-direction: column;
         gap: 0.5rem;
-        margin-bottom: 1.5rem;
+        margin-bottom: 2rem;
+        padding: 1.5rem;
+        background: linear-gradient(135deg, #f0f9ff 0%, #e0f2fe 100%);
+        border-radius: 1rem;
     }
 
     .balance .label {
         color: #64748b;
-        font-size: 0.875rem;
+        font-size: 1rem;
+        font-weight: 500;
     }
 
     .balance .amount {
         color: #1e293b;
-        font-size: 2rem;
+        font-size: 2.5rem;
         font-weight: bold;
+        text-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
     }
 
     .quick-actions {
@@ -855,54 +1056,60 @@
     }
 
     .btn-primary {
-        background: #2563eb;
+        background: linear-gradient(135deg, #3b82f6 0%, #2563eb 100%);
         color: white;
-        padding: 0.5rem 1rem;
+        padding: 0.75rem 1.5rem;
         border: none;
-        border-radius: 0.375rem;
-        font-weight: 500;
+        border-radius: 0.75rem;
+        font-weight: 600;
         cursor: pointer;
-        transition: background-color 0.2s;
+        transition: all 0.3s ease;
+        box-shadow: 0 4px 6px -1px rgba(37, 99, 235, 0.2);
     }
 
     .btn-primary:hover {
-        background: #1d4ed8;
+        transform: translateY(-2px);
+        box-shadow: 0 6px 8px -1px rgba(37, 99, 235, 0.3);
     }
 
     .btn-secondary {
-        background: #e2e8f0;
+        background: white;
         color: #1e293b;
-        padding: 0.5rem 1rem;
-        border: none;
-        border-radius: 0.375rem;
-        font-weight: 500;
+        padding: 0.75rem 1.5rem;
+        border: 2px solid #e2e8f0;
+        border-radius: 0.75rem;
+        font-weight: 600;
         cursor: pointer;
-        transition: background-color 0.2s;
+        transition: all 0.3s ease;
     }
 
     .btn-secondary:hover {
-        background: #cbd5e1;
+        background: #f8fafc;
+        border-color: #cbd5e1;
+        transform: translateY(-2px);
     }
 
     .btn-danger {
         background: #dc2626;
         color: white;
-        padding: 0.5rem 1rem;
+        padding: 0.75rem 1.5rem;
         border: none;
-        border-radius: 0.375rem;
-        font-weight: 500;
+        border-radius: 0.75rem;
+        font-weight: 600;
         cursor: pointer;
-        transition: background-color 0.2s;
+        transition: all 0.3s ease;
     }
 
     .btn-danger:hover {
-        background: #b91c1c;
+        transform: translateY(-2px);
+        box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1);
     }
 
     .transactions {
-        max-height: 300px;
+        max-height: 600px;
         display: flex;
         flex-direction: column;
+        overflow: hidden;
     }
 
     .transaction-list {
@@ -912,33 +1119,43 @@
         overflow-y: auto;
         padding-right: 0.5rem;
         margin-right: -0.5rem;
+        max-height: 550px;
     }
 
     .transaction-list::-webkit-scrollbar {
-        width: 6px;
+        width: 8px;
     }
 
     .transaction-list::-webkit-scrollbar-track {
-        background: #f1f5f9;
-        border-radius: 3px;
+        background: var(--hover-bg);
+        border-radius: 4px;
     }
 
     .transaction-list::-webkit-scrollbar-thumb {
-        background: #cbd5e1;
-        border-radius: 3px;
+        background: var(--border-color);
+        border-radius: 4px;
+        border: 2px solid var(--hover-bg);
     }
 
     .transaction-list::-webkit-scrollbar-thumb:hover {
-        background: #94a3b8;
+        background: var(--text-secondary);
     }
 
     .transaction-item {
         display: flex;
         justify-content: space-between;
         align-items: center;
-        padding: 1rem;
-        background: #f8fafc;
-        border-radius: 0.375rem;
+        padding: 1.25rem;
+        background: var(--card-bg);
+        border-radius: 1rem;
+        transition: all 0.3s ease;
+        border: 1px solid var(--border-color);
+        color: var(--text-primary);
+    }
+
+    .transaction-item:hover {
+        transform: translateY(-2px);
+        box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1);
     }
 
     .transaction-info {
@@ -955,14 +1172,16 @@
 
     .transaction-type.deposit {
         color: #059669;
+        font-weight: 600;
     }
 
     .transaction-type.withdrawal {
         color: #dc2626;
+        font-weight: 600;
     }
 
     .transaction-description {
-        color: #64748b;
+        color: var(--text-secondary);
         font-size: 0.875rem;
     }
 
@@ -979,14 +1198,16 @@
 
     .transaction-amount.deposit {
         color: #059669;
+        font-weight: 600;
     }
 
     .transaction-amount.withdrawal {
         color: #dc2626;
+        font-weight: 600;
     }
 
     .transaction-date {
-        color: #64748b;
+        color: var(--text-secondary);
         font-size: 0.875rem;
     }
 
@@ -1003,24 +1224,65 @@
         right: 0;
         bottom: 0;
         background: rgba(0, 0, 0, 0.5);
+        backdrop-filter: blur(4px);
         display: flex;
         align-items: center;
         justify-content: center;
         z-index: 1000;
+        animation: fadeIn 0.3s ease-out;
     }
 
     .modal-content {
-        background: white;
+        background: var(--card-bg);
         padding: 2rem;
-        border-radius: 0.5rem;
+        border-radius: 1rem;
         width: 100%;
-        max-width: 400px;
+        max-width: 500px;
+        box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.1);
+        animation: modalSlideIn 0.3s ease-out;
+        position: relative;
+        border: 1px solid var(--border-color);
+        color: var(--text-primary);
     }
 
-    .transaction-form {
+    .modal-header {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        margin-bottom: 1.5rem;
+        padding-bottom: 1rem;
+        border-bottom: 2px solid #e2e8f0;
+    }
+
+    .modal-header h2 {
+        margin: 0;
+        font-size: 1.5rem;
+        background: none;
+        -webkit-text-fill-color: var(--text-primary);
+    }
+
+    .btn-close {
+        background: none;
+        border: none;
+        font-size: 1.5rem;
+        color: #64748b;
+        cursor: pointer;
+        padding: 0.5rem;
+        line-height: 1;
+        border-radius: 0.5rem;
+        transition: all 0.2s;
+    }
+
+    .btn-close:hover {
+        background: #f1f5f9;
+        color: #1e293b;
+    }
+
+    .transaction-form,
+    .transfer-form {
         display: flex;
         flex-direction: column;
-        gap: 1rem;
+        gap: 1.25rem;
     }
 
     .form-group {
@@ -1030,21 +1292,68 @@
     }
 
     .form-group label {
-        color: #4b5563;
+        color: var(--text-secondary);
         font-weight: 500;
+        font-size: 0.875rem;
     }
 
-    .form-group input {
-        padding: 0.75rem;
-        border: 1px solid #e2e8f0;
-        border-radius: 0.375rem;
+    .form-group input,
+    .form-group select {
+        padding: 0.75rem 1rem;
+        border: 2px solid var(--border-color);
+        border-radius: 0.75rem;
         font-size: 1rem;
+        transition: all 0.3s ease;
+        background: var(--card-bg);
+        color: var(--text-primary);
+    }
+
+    .form-group input:focus,
+    .form-group select:focus {
+        border-color: #3b82f6;
+        box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.1);
+        outline: none;
     }
 
     .transaction-actions {
         display: flex;
         gap: 1rem;
         margin-top: 1rem;
+        flex-wrap: wrap;
+    }
+
+    .transaction-actions button {
+        flex: 1;
+        min-width: 120px;
+    }
+
+    .account-select {
+        padding: 0.75rem 1rem;
+        background: #f8fafc;
+        border: 2px solid #e2e8f0;
+        border-radius: 0.75rem;
+        font-size: 1rem;
+        color: #1e293b;
+    }
+
+    @keyframes fadeIn {
+        from {
+            opacity: 0;
+        }
+        to {
+            opacity: 1;
+        }
+    }
+
+    @keyframes modalSlideIn {
+        from {
+            opacity: 0;
+            transform: translateY(-20px);
+        }
+        to {
+            opacity: 1;
+            transform: translateY(0);
+        }
     }
 
     .loading {
@@ -1074,40 +1383,125 @@
     .account-item {
         display: flex;
         justify-content: space-between;
-        align-items: center;
-        padding: 1rem;
-        background: #f8fafc;
-        border: 1px solid #e2e8f0;
-        border-radius: 0.375rem;
+        align-items: flex-start;
+        padding: 1.5rem;
+        background: var(--card-bg);
+        border: 2px solid var(--border-color);
+        border-radius: 1.25rem;
         cursor: pointer;
-        transition: all 0.2s;
+        transition: all 0.3s ease;
         width: 100%;
+        position: relative;
+        overflow: hidden;
+        color: var(--text-primary);
+    }
+
+    .account-item::before {
+        content: '';
+        position: absolute;
+        top: 0;
+        left: 0;
+        right: 0;
+        height: 4px;
+        background: linear-gradient(90deg, #3b82f6, #2563eb);
+        opacity: 0;
+        transition: opacity 0.3s ease;
     }
 
     .account-item:hover {
-        background: #f1f5f9;
+        transform: translateY(-4px);
+        box-shadow: 0 12px 20px -8px rgba(0, 0, 0, 0.1);
+        border-color: var(--text-secondary);
+    }
+
+    .account-item:hover::before {
+        opacity: 1;
     }
 
     .account-item.selected {
-        background: #e0f2fe;
+        background: linear-gradient(135deg, #0ea5e9 0%, #0284c7 100%);
         border-color: #0ea5e9;
+        box-shadow: 0 8px 16px -4px rgba(14, 165, 233, 0.2);
+    }
+
+    .account-item.selected::before {
+        opacity: 1;
+        background: linear-gradient(90deg, #0ea5e9, #0284c7);
     }
 
     .account-info {
         display: flex;
         flex-direction: column;
-        gap: 0.25rem;
+        gap: 0.5rem;
+        width: 100%;
+    }
+
+    .account-header {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
     }
 
     .account-balance {
-        font-size: 1.25rem;
+        font-size: 1.5rem;
         font-weight: bold;
-        color: #0f172a;
+        background: none;
+        -webkit-text-fill-color: var(--text-primary);
+        text-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+        color: var(--text-primary);
     }
 
     .account-status {
         font-size: 0.875rem;
-        color: #64748b;
+        color: var(--text-secondary);
+        padding: 0.375rem 1rem;
+        background: var(--hover-bg);
+        border-radius: 1.5rem;
+        font-weight: 500;
+        box-shadow: 0 2px 4px rgba(0, 0, 0, 0.05);
+        transition: all 0.3s ease;
+    }
+
+    .account-item:hover .account-status {
+        background: var(--text-secondary);
+        color: var(--text-primary);
+    }
+
+    .account-item.selected .account-status {
+        background: rgba(255, 255, 255, 0.9);
+        color: #0ea5e9;
+    }
+
+    .account-id {
+        display: flex;
+        align-items: center;
+        gap: 0.75rem;
+        font-size: 0.875rem;
+        color: var(--text-secondary);
+        background: var(--hover-bg);
+        padding: 0.75rem 1rem;
+        border-radius: 0.75rem;
+        border: 1px solid var(--border-color);
+        transition: all 0.3s ease;
+    }
+
+    .account-item:hover .account-id {
+        background: var(--text-primary);
+        border-color: var(--text-secondary);
+    }
+
+    .id-label {
+        font-weight: 600;
+        color: var(--text-secondary);
+    }
+
+    .id-value {
+        font-family: 'Courier New', monospace;
+        color: var(--text-primary);
+        letter-spacing: 0.5px;
+        padding: 0.125rem 0.375rem;
+        background: var(--card-bg);
+        border-radius: 0.375rem;
     }
 
     .no-accounts {
@@ -1122,63 +1516,124 @@
         text-align: center;
     }
 
-    .account-select {
-        padding: 0.75rem;
-        background: #f8fafc;
-        border: 1px solid #e2e8f0;
-        border-radius: 0.375rem;
-        font-size: 1rem;
-        color: #1e293b;
-    }
-
-    .transfer-form {
+    .btn-copy {
+        background: none;
+        border: none;
+        padding: 0.375rem;
+        cursor: pointer;
+        border-radius: 0.5rem;
+        transition: all 0.2s ease;
         display: flex;
-        flex-direction: column;
-        gap: 1rem;
+        align-items: center;
+        justify-content: center;
+        color: var(--text-secondary);
+        min-width: 36px;
+        height: 36px;
     }
 
-    .transfer-form select {
-        padding: 0.75rem;
-        border: 1px solid #e2e8f0;
-        border-radius: 0.375rem;
-        font-size: 1rem;
-        background: white;
-        color: #1e293b;
+    .btn-copy:hover {
+        background: var(--hover-bg);
+        color: var(--text-primary);
+        transform: scale(1.1);
     }
 
-    .transfer-form select:focus {
-        outline: none;
-        border-color: #2563eb;
-        box-shadow: 0 0 0 2px rgba(37, 99, 235, 0.1);
+    .copy-icon {
+        font-size: 1.125rem;
+        line-height: 1;
+    }
+
+    .account-item.selected .btn-copy {
+        color: #0ea5e9;
+    }
+
+    .account-item.selected .btn-copy:hover {
+        background: rgba(14, 165, 233, 0.1);
+    }
+
+    .account-list .btn-secondary {
+        background: linear-gradient(135deg, #0ea5e9 0%, #0284c7 100%);
+        color: white;
+        border: none;
+        box-shadow: 0 4px 6px -1px rgba(14, 165, 233, 0.2);
+    }
+
+    .account-list .btn-secondary:hover {
+        background: linear-gradient(135deg, #0284c7 0%, #0369a1 100%);
+        border-color: transparent;
+        box-shadow: 0 6px 8px -1px rgba(14, 165, 233, 0.3);
     }
 
     @media (max-width: 640px) {
+        .tabs {
+            flex-direction: column;
+            gap: 0.5rem;
+            padding: 1rem;
+        }
+
+        .tab-btn {
+            width: 100%;
+            text-align: center;
+            padding: 1rem;
+        }
+
         .dashboard-content {
             padding: 1rem;
         }
 
-        .dashboard-grid {
-            grid-template-columns: 1fr;
+        .balance .amount {
+            font-size: 2rem;
         }
 
-        .transaction-item {
+        .modal-content {
+            margin: 1rem;
+            padding: 1.5rem;
+        }
+
+        .transaction-actions {
+            flex-direction: column;
+        }
+
+        .transaction-actions button {
+            width: 100%;
+        }
+
+        .account-header {
             flex-direction: column;
             align-items: flex-start;
-            gap: 0.5rem;
-        }
-
-        .transaction-details {
-            align-items: flex-start;
-        }
-
-        .account-item {
-            flex-direction: column;
-            align-items: flex-start;
-            gap: 0.5rem;
+            gap: 0.75rem;
         }
 
         .account-status {
             align-self: flex-start;
+        }
+
+        .account-id {
+            flex-wrap: wrap;
+            gap: 0.75rem;
+        }
+
+        .btn-copy {
+            margin-left: auto;
+        }
+
+        .account-balance {
+            font-size: 1.25rem;
+        }
+
+        .account-list .btn-secondary {
+            width: 100%;
+        }
+
+        .btn-theme {
+            font-size: 1.5rem;
+        }
+
+        .transactions {
+            max-height: 500px;
+        }
+
+        .transaction-list {
+            max-height: 450px;
         }
     }
 </style> 

@@ -1,24 +1,14 @@
 <script lang="ts">
     import { auth } from '$lib/services/firebase';
     import { signInWithEmailAndPassword } from 'firebase/auth';
-    import type { AuthError } from 'firebase/auth';
+    import { CustomerModel } from '$lib/models/Customer';
     import { goto } from '$app/navigation';
-    import { onMount } from 'svelte';
+    import type { AuthError } from 'firebase/auth';
 
     let email = '';
     let password = '';
     let error = '';
     let loading = false;
-    let isLoggedIn = false;
-
-    onMount(() => {
-        auth.onAuthStateChanged((user) => {
-            isLoggedIn = !!user;
-            if (isLoggedIn) {
-                goto('/dashboard');
-            }
-        });
-    });
 
     async function handleSubmit() {
         if (!email || !password) {
@@ -29,7 +19,16 @@
         try {
             loading = true;
             error = '';
-            await signInWithEmailAndPassword(auth, email, password);
+            const userCredential = await signInWithEmailAndPassword(auth, email, password);
+            
+            // Verify customer exists
+            const customer = await CustomerModel.getCustomer(userCredential.user.uid);
+            if (!customer) {
+                await auth.signOut();
+                error = 'Account not found';
+                return;
+            }
+
             goto('/dashboard');
         } catch (e) {
             const authError = e as AuthError;
@@ -93,14 +92,6 @@
                 />
             </div>
 
-            <div class="form-options">
-                <label class="remember-me">
-                    <input type="checkbox" />
-                    <span>Remember me</span>
-                </label>
-                <a href="/forgot-password" class="forgot-password">Forgot password?</a>
-            </div>
-
             <button type="submit" class="btn-login" disabled={loading}>
                 {#if loading}
                     <span class="loading-spinner"></span>
@@ -111,7 +102,7 @@
         </form>
 
         <div class="login-footer">
-            <p>Don't have an account? <a href="/register">Sign up</a></p>
+            <p>Don't have an account? <a href="/register">Create one</a></p>
         </div>
     </div>
 </div>
@@ -180,29 +171,6 @@
         outline: none;
         border-color: #2563eb;
         box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.1);
-    }
-
-    .form-options {
-        display: flex;
-        justify-content: space-between;
-        align-items: center;
-        font-size: 0.875rem;
-    }
-
-    .remember-me {
-        display: flex;
-        align-items: center;
-        gap: 0.5rem;
-        color: #4b5563;
-    }
-
-    .forgot-password {
-        color: #2563eb;
-        text-decoration: none;
-    }
-
-    .forgot-password:hover {
-        text-decoration: underline;
     }
 
     .btn-login {

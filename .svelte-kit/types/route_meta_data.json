@@ -1,4 +1,6 @@
 {
 	"/": [],
-	"/login": []
+	"/dashboard": [],
+	"/login": [],
+	"/register": []
 }
